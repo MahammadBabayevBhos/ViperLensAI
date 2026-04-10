@@ -21,7 +21,7 @@ It is designed for modern SOC workflows where analysts need both **machine-speed
 | **Backend** | Node.js, Express |
 | **Database** | SQLite, Sequelize ORM |
 | **Analysis** | Python 3.x, `pefile`, `numpy`, `matplotlib` |
-| **AI** | Google Generative AI SDK (Gemini 1.5 Flash) |
+| **AI** | Google Generative AI SDK (Gemini-flash-latest) |
 | **Frontend** | EJS templates, Tailwind CSS, Chart.js |
 
 ## Architecture
