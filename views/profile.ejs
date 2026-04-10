@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= pageTitle %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/public/css/styles.css" />
+</head>
+<body class="h-full bg-gradient-to-br from-cyber-900 via-cyber-800 to-cyber-900 text-slate-100 antialiased">
+  <main class="mx-auto max-w-6xl px-6 py-10 space-y-6">
+    <div id="adminToast" class="pointer-events-none fixed right-6 top-6 hidden rounded-lg border px-4 py-2 text-sm"></div>
+    <header class="flex items-center justify-between border-b border-slate-800 pb-5">
+      <div>
+        <p class="text-xs uppercase tracking-[0.3em] text-sky-400">Identity Management</p>
+        <h1 class="mt-2 text-3xl font-semibold">Profile Settings</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="/" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Dashboard</a>
+        <a href="/history" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">History</a>
+        <form action="/logout" method="POST">
+          <button type="submit" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Logout</button>
+        </form>
+      </div>
+    </header>
+
+    <% if (error) { %>
+      <div class="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"><%= error %></div>
+    <% } %>
+
+    <% if (success) { %>
+      <div id="successToast" class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"><%= success %></div>
+    <% } %>
+
+    <section class="grid gap-6 lg:grid-cols-2">
+      <div class="rounded-xl border border-slate-800 bg-slate-900/70 p-6">
+        <h2 class="text-lg font-semibold">Profile Information</h2>
+        <form action="/profile" method="POST" class="mt-4 space-y-4">
+          <div>
+            <label for="username" class="mb-1 block text-sm text-slate-300">Username</label>
+            <input id="username" name="username" value="<%= profileUser.username %>" required class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400" />
+          </div>
+          <div>
+            <label for="email" class="mb-1 block text-sm text-slate-300">Email</label>
+            <input id="email" name="email" type="email" value="<%= profileUser.email %>" required class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400" />
+          </div>
+          <button type="submit" class="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-400">Update Profile</button>
+        </form>
+      </div>
+
+      <div class="rounded-xl border border-slate-800 bg-slate-900/70 p-6">
+        <h2 class="text-lg font-semibold">Change Password</h2>
+        <form action="/profile/password" method="POST" class="mt-4 space-y-4">
+          <div>
+            <label for="oldPassword" class="mb-1 block text-sm text-slate-300">Current Password</label>
+            <input id="oldPassword" name="oldPassword" type="password" required class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400" />
+          </div>
+          <div>
+            <label for="newPassword" class="mb-1 block text-sm text-slate-300">New Password</label>
+            <input id="newPassword" name="newPassword" type="password" required class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400" />
+          </div>
+          <div>
+            <label for="confirmPassword" class="mb-1 block text-sm text-slate-300">Confirm New Password</label>
+            <input id="confirmPassword" name="confirmPassword" type="password" required class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400" />
+          </div>
+          <button type="submit" class="rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-800">Update Password</button>
+        </form>
+      </div>
+    </section>
+
+    <% if (isAdmin) { %>
+      <section class="rounded-xl border border-slate-800 bg-slate-900/70 p-6">
+        <h2 class="text-lg font-semibold">Admin Panel</h2>
+        <p class="mt-1 text-sm text-slate-400">Manage subscription tier across all registered users.</p>
+        <div class="mt-4 overflow-hidden rounded-lg border border-slate-800">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-900 text-slate-300">
+              <tr>
+                <th class="px-4 py-3">Username</th>
+                <th class="px-4 py-3">Email</th>
+                <th class="px-4 py-3">Tier</th>
+                <th class="px-4 py-3">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% users.forEach((u) => { %>
+                <tr class="border-t border-slate-800">
+                  <td class="px-4 py-3 text-slate-200"><%= u.username %></td>
+                  <td class="px-4 py-3 text-slate-300"><%= u.email %></td>
+                  <td class="px-4 py-3">
+                    <span id="tier-badge-<%= u.id %>" class="uppercase <%= u.tier === 'premium' ? 'text-emerald-300' : 'text-amber-300' %>"><%= u.tier %></span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <% if (u.email.toLowerCase() === 'admin@viperlens.ai') { %>
+                      <span class="text-xs text-slate-500">Protected</span>
+                    <% } else { %>
+                      <button data-user-id="<%= u.id %>" class="tier-toggle-btn rounded-md border border-sky-500/40 px-3 py-1 text-xs text-sky-200 hover:bg-sky-500/10">
+                        Toggle Tier
+                      </button>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    <% } %>
+  </main>
+
+  <script>
+    (() => {
+      const toast = document.getElementById('successToast');
+      if (toast) {
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 300ms ease';
+        }, 2000);
+      }
+
+      document.querySelectorAll('.tier-toggle-btn').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const userId = button.getAttribute('data-user-id');
+          button.disabled = true;
+          const adminToast = document.getElementById('adminToast');
+          try {
+            const response = await fetch(`/admin/users/${userId}/toggle-tier`, { method: 'POST' });
+            const payload = await response.json();
+            if (!response.ok || payload.status !== 'ok') {
+              throw new Error('Failed to toggle tier.');
+            }
+            const badge = document.getElementById(`tier-badge-${userId}`);
+            if (badge) {
+              badge.textContent = payload.user.tier;
+              badge.className = `uppercase ${payload.user.tier === 'premium' ? 'text-emerald-300' : 'text-amber-300'}`;
+            }
+            if (adminToast) {
+              adminToast.textContent = 'Tier updated successfully.';
+              adminToast.className = 'pointer-events-none fixed right-6 top-6 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200';
+              adminToast.classList.remove('hidden');
+              setTimeout(() => adminToast.classList.add('hidden'), 1800);
+            }
+          } catch (_error) {
+            if (adminToast) {
+              adminToast.textContent = 'Tier update failed.';
+              adminToast.className = 'pointer-events-none fixed right-6 top-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-200';
+              adminToast.classList.remove('hidden');
+              setTimeout(() => adminToast.classList.add('hidden'), 1800);
+            }
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

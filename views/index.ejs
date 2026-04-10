@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= pageTitle %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cyber: {
+              900: '#020617',
+              800: '#0b1120',
+              700: '#111827',
+              accent: '#38bdf8'
+            }
+          },
+          boxShadow: {
+            glow: '0 0 0 1px rgba(56,189,248,0.35), 0 12px 40px rgba(15,23,42,0.6)'
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="/public/css/styles.css" />
+</head>
+<body class="h-full bg-gradient-to-br from-cyber-900 via-cyber-800 to-cyber-900 text-slate-100 antialiased">
+  <div class="min-h-screen px-6 py-10">
+    <main class="mx-auto max-w-5xl space-y-8">
+      <header class="flex items-center justify-between border-b border-slate-800 pb-6">
+        <div>
+          <p class="text-xs uppercase tracking-[0.3em] text-sky-400">Security Operations</p>
+          <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-100">Malware Analysis Platform</h1>
+          <p class="mt-2 text-sm text-slate-400">Upload executable samples for controlled inspection workflow.</p>
+          <% if (user) { %>
+            <p class="mt-2 text-xs uppercase tracking-wide text-slate-500">User: <%= user.username %> · Tier: <%= user.tier %></p>
+          <% } %>
+        </div>
+        <div class="hidden items-center gap-3 md:flex">
+          <a href="/profile" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Profile</a>
+          <a href="/history" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">History</a>
+          <form action="/logout" method="POST">
+            <button type="submit" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Logout</button>
+          </form>
+          <div class="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 shadow-glow">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Pipeline</p>
+            <p class="mt-1 text-sm font-medium text-slate-200">Ingestion -> Python Scan -> Verdict</p>
+          </div>
+        </div>
+      </header>
+
+      <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-glow backdrop-blur">
+        <form action="/analyze" method="POST" enctype="multipart/form-data" id="uploadForm" class="space-y-5">
+          <label for="malwareSample" id="dropZone" class="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/70 px-6 py-14 text-center transition hover:border-sky-400 hover:bg-slate-900">
+            <div class="mb-4 rounded-full border border-slate-700 p-3 text-sky-300 group-hover:border-sky-400 group-hover:text-sky-200">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+            </div>
+            <p class="text-lg font-medium tracking-tight text-slate-100">Drag and drop executable file</p>
+            <p class="mt-2 text-sm text-slate-400">or click to browse local storage (.exe only, max 50 MB)</p>
+            <input id="malwareSample" name="malwareSample" type="file" accept=".exe" class="hidden" required />
+          </label>
+
+          <div id="fileMeta" class="hidden rounded-lg border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-300"></div>
+
+          <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 focus:ring-offset-slate-900">
+            Start Analysis
+          </button>
+        </form>
+      </section>
+
+      <% if (error) { %>
+        <section class="rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-4">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-red-300">Analysis Error</h2>
+          <p class="mt-2 text-sm text-red-200"><%= error %></p>
+        </section>
+      <% } %>
+
+      <% if (result) { %>
+        <%
+          const analysis = result.analysis || {};
+          const entropy = analysis.entropy || {};
+          const sectionEntropy = entropy.section_entropy || {};
+          const iat = analysis.iat_analysis || {};
+          const regexScan = analysis.regex_scan || {};
+          const prediction = analysis.prediction || {};
+          const confidenceScore = Number(prediction.confidence || 0);
+          const confidencePercent = Math.max(0, Math.min(100, Math.round(confidenceScore * 100)));
+          const verdictText = (prediction.label || analysis.verdict || 'unknown').toString().toLowerCase();
+          const isMalicious = verdictText === 'malicious';
+          const suspiciousImports = Array.isArray(iat.suspicious_apis) ? iat.suspicious_apis : [];
+          const ipMatches = Array.isArray(regexScan.ipv4_matches) ? regexScan.ipv4_matches : [];
+          const urlMatches = Array.isArray(regexScan.url_matches) ? regexScan.url_matches : [];
+          const packingAlert = Boolean(entropy.packing_alert);
+          const serializedResultPayload = JSON.stringify(result);
+          const serializedAiPayload = aiReport ? JSON.stringify(aiReport) : '';
+          const dynamicAnalysis = (result.combinedIntelligence || {}).dynamic_analysis || null;
+          const dynamicMeta = dynamicAnalysis ? (dynamicAnalysis.metadata || {}) : {};
+        %>
+        <section class="fade-in rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-lg font-semibold text-slate-100">ViperLens Analysis Results</h2>
+            <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide <%= isMalicious ? 'border-red-400/60 bg-red-500/20 text-red-200' : 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200' %>">
+              <%= isMalicious ? 'Malicious' : 'Benign' %>
+            </span>
+          </div>
+
+          <div class="mt-4 grid gap-3 text-sm text-slate-300 md:grid-cols-3">
+            <div class="rounded-lg border border-slate-800 bg-slate-950 px-4 py-3">
+              <p class="text-slate-400">Original Name</p>
+              <p class="mt-1 font-medium text-slate-100"><%= result.fileName %></p>
+            </div>
+            <div class="rounded-lg border border-slate-800 bg-slate-950 px-4 py-3">
+              <p class="text-slate-400">Stored As</p>
+              <p class="mt-1 font-medium text-slate-100"><%= result.storedAs %></p>
+            </div>
+            <div class="rounded-lg border border-slate-800 bg-slate-950 px-4 py-3">
+              <p class="text-slate-400">Total Imports</p>
+              <p class="mt-1 font-medium text-slate-100"><%= iat.total_imports || 0 %></p>
+            </div>
+          </div>
+
+          <% if (packingAlert) { %>
+            <div class="mt-5 rounded-xl border border-amber-400/50 bg-amber-500/10 p-4">
+              <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-amber-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </div>
+                <div>
+                  <p class="text-sm font-semibold uppercase tracking-wide text-amber-200">Packing Alert</p>
+                  <p class="mt-1 text-sm text-amber-100">High entropy in the `.text` section indicates potential packing or obfuscation.</p>
+                </div>
+              </div>
+            </div>
+          <% } %>
+
+          <div class="mt-6 grid gap-5 lg:grid-cols-2">
+            <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <p class="text-sm font-medium text-slate-200">Confidence Score</p>
+              <p class="mt-1 text-xs text-slate-400">Model confidence for current verdict</p>
+              <div class="relative mt-4 h-56">
+                <canvas id="confidenceGauge"></canvas>
+                <div class="pointer-events-none absolute inset-0 flex items-center justify-center pt-4">
+                  <span class="text-2xl font-semibold text-slate-100"><%= confidencePercent %>%</span>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <p class="text-sm font-medium text-slate-200">Section-level Entropy</p>
+              <p class="mt-1 text-xs text-slate-400">Distribution across PE sections</p>
+              <div class="mt-4 h-56">
+                <canvas id="entropyBarChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 grid gap-5 lg:grid-cols-2">
+            <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <p class="text-sm font-medium text-slate-200">Suspicious Imports</p>
+              <div class="mt-3 overflow-hidden rounded-lg border border-slate-800">
+                <table class="w-full text-left text-sm">
+                  <thead class="bg-slate-900 text-slate-300">
+                    <tr>
+                      <th class="px-3 py-2 font-medium">API</th>
+                      <th class="px-3 py-2 font-medium">Category</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% if (suspiciousImports.length === 0) { %>
+                      <tr class="border-t border-slate-800">
+                        <td class="px-3 py-2 text-slate-400" colspan="2">No suspicious imports detected.</td>
+                      </tr>
+                    <% } else { %>
+                      <% suspiciousImports.forEach((api) => { %>
+                        <tr class="border-t border-slate-800">
+                          <td class="px-3 py-2 text-slate-100"><%= api %></td>
+                          <td class="px-3 py-2 text-slate-400">Execution / Injection</td>
+                        </tr>
+                      <% }) %>
+                    <% } %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <p class="text-sm font-medium text-slate-200">Regex Matches</p>
+              <div class="mt-3 space-y-3 text-sm">
+                <div>
+                  <p class="text-xs uppercase tracking-wide text-slate-400">IPv4 Addresses</p>
+                  <p class="mt-1 text-slate-200 break-all"><%= ipMatches.length ? ipMatches.join(', ') : 'No IPv4 matches found.' %></p>
+                </div>
+                <div>
+                  <p class="text-xs uppercase tracking-wide text-slate-400">URLs</p>
+                  <p class="mt-1 text-slate-200 break-all"><%= urlMatches.length ? urlMatches.join(', ') : 'No URL matches found.' %></p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <section class="mt-6 rounded-xl border border-slate-700 bg-slate-950 p-4">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-200">Premium Features</h3>
+                <p class="mt-1 text-sm text-slate-400">Generate AI-assisted SOC guidance and export a formal security incident report.</p>
+              </div>
+              <% if (aiReport) { %>
+                <form action="/premium/report" method="POST">
+                  <textarea name="resultPayload" class="hidden"><%- serializedResultPayload %></textarea>
+                  <textarea name="aiReportPayload" class="hidden"><%- serializedAiPayload %></textarea>
+                  <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400">
+                    Download Security Incident PDF
+                  </button>
+                </form>
+              <% } else if (isFreeTier) { %>
+                <button id="openPremiumModalReport" type="button" class="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                  Download Security Incident PDF (Premium)
+                </button>
+              <% } %>
+            </div>
+
+            <div class="mt-4 flex flex-wrap items-center gap-3">
+              <% if (isFreeTier) { %>
+                <button id="openPremiumModalAi" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/50 bg-sky-500/10 px-5 py-2.5 text-sm font-medium text-sky-200 transition hover:bg-sky-500/20">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                  Generate AI Report (Premium)
+                </button>
+              <% } else { %>
+                <form id="premiumAiForm" action="/premium/ai" method="POST" class="flex items-center gap-3">
+                  <textarea name="resultPayload" class="hidden"><%- serializedResultPayload %></textarea>
+                  <button type="submit" class="inline-flex items-center justify-center rounded-lg border border-sky-400/50 bg-sky-500/10 px-5 py-2.5 text-sm font-medium text-sky-200 transition hover:bg-sky-500/20">
+                    Deep AI Analysis
+                  </button>
+                  <span id="sandboxSpinner" class="hidden inline-flex items-center gap-2 text-xs text-slate-300">
+                    <span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-500 border-t-sky-300"></span>
+                    Sandbox analyzing...
+                  </span>
+                </form>
+              <% } %>
+              <% if (isFreeTier) { %>
+                <span class="text-xs uppercase tracking-wide text-amber-300">Free Tier</span>
+              <% } %>
+            </div>
+
+            <% if (aiReport) { %>
+              <div class="mt-4 rounded-lg border border-slate-800 bg-slate-900 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="text-sm font-medium text-slate-100">Gemini Analyst Response</p>
+                  <p class="text-xs text-slate-400"><%= aiReport.model %> · <%= aiReport.generatedAt %></p>
+                </div>
+                <pre class="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-200"><%= aiReport.content %></pre>
+              </div>
+            <% } %>
+
+            <% if (dynamicAnalysis) { %>
+              <div class="mt-4 rounded-lg border border-slate-800 bg-slate-900 p-4">
+                <p class="text-sm font-medium text-slate-100">Dynamic Behavioral Analysis</p>
+                <p class="mt-1 text-xs text-slate-400">Sandbox execution intelligence from Joe Sandbox</p>
+                <div class="mt-3 grid gap-3 md:grid-cols-2">
+                  <div class="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">
+                    <p class="text-xs uppercase tracking-wide text-slate-400">Status</p>
+                    <p class="mt-1 text-sm text-slate-200"><%= dynamicMeta.status || 'N/A' %></p>
+                  </div>
+                  <div class="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">
+                    <p class="text-xs uppercase tracking-wide text-slate-400">Threat Level</p>
+                    <p class="mt-1 text-sm text-slate-200"><%= dynamicMeta.threat_level || 'N/A' %></p>
+                  </div>
+                </div>
+              </div>
+            <% } %>
+          </section>
+        </section>
+
+        <% if (isFreeTier) { %>
+          <div id="premiumModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+            <div class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+              <div class="flex items-start justify-between gap-3">
+                <h3 class="text-xl font-semibold text-slate-100">Upgrade to ViperLens Premium</h3>
+                <button id="closePremiumModal" type="button" class="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">Close</button>
+              </div>
+              <p class="mt-3 text-sm text-slate-400">Unlock advanced threat investigation workflows and premium response tooling.</p>
+              <ul class="mt-4 space-y-2 text-sm text-slate-200">
+                <li class="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">Full Sandbox Dynamic Analysis</li>
+                <li class="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">Gemini 1.5 Powered Explanatory AI</li>
+                <li class="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">Professional PDF Incident Reports</li>
+              </ul>
+              <button type="button" class="mt-5 inline-flex items-center justify-center rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-sky-400">
+                Upgrade Now
+              </button>
+            </div>
+          </div>
+        <% } %>
+
+        <script>
+          (() => {
+            const analysis = <%- JSON.stringify(result.analysis || {}) %>;
+            const prediction = analysis.prediction || {};
+            const entropy = analysis.entropy || {};
+            const sectionEntropy = entropy.section_entropy || {};
+            const confidence = Number(prediction.confidence || 0);
+            const confidencePercent = Math.max(0, Math.min(100, Math.round(confidence * 100)));
+            const labels = Object.keys(sectionEntropy);
+            const values = labels.map((key) => Number(sectionEntropy[key] || 0));
+
+            const gaugeCtx = document.getElementById('confidenceGauge');
+            if (gaugeCtx) {
+              new Chart(gaugeCtx, {
+                type: 'doughnut',
+                data: {
+                  labels: ['Confidence', 'Remaining'],
+                  datasets: [{
+                    data: [confidencePercent, 100 - confidencePercent],
+                    backgroundColor: ['#38bdf8', '#1e293b'],
+                    borderColor: ['#38bdf8', '#1e293b'],
+                    borderWidth: 1
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  cutout: '72%',
+                  rotation: -90,
+                  circumference: 180,
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                  }
+                }
+              });
+            }
+
+            const entropyCtx = document.getElementById('entropyBarChart');
+            if (entropyCtx) {
+              new Chart(entropyCtx, {
+                type: 'bar',
+                data: {
+                  labels,
+                  datasets: [{
+                    label: 'Entropy',
+                    data: values,
+                    backgroundColor: '#38bdf8',
+                    borderRadius: 5
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    x: {
+                      ticks: { color: '#94a3b8' },
+                      grid: { color: 'rgba(30,41,59,0.35)' }
+                    },
+                    y: {
+                      suggestedMin: 0,
+                      suggestedMax: 8,
+                      ticks: { color: '#94a3b8' },
+                      grid: { color: 'rgba(30,41,59,0.35)' }
+                    }
+                  },
+                  plugins: {
+                    legend: { display: false }
+                  }
+                }
+              });
+            }
+          })();
+        </script>
+      <% } %>
+    </main>
+  </div>
+
+  <script src="/public/js/main.js"></script>
+  <script>
+    (() => {
+      const premiumAiForm = document.getElementById('premiumAiForm');
+      const sandboxSpinner = document.getElementById('sandboxSpinner');
+      if (premiumAiForm && sandboxSpinner) {
+        premiumAiForm.addEventListener('submit', () => {
+          sandboxSpinner.classList.remove('hidden');
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
