@@ -73,7 +73,7 @@ Server default: `http://localhost:3000`
 
 ## Project Status
 
-⚠️ **Note on API Access:** Dynamic analysis is powered by Joe Sandbox. Account approval is currently in progress. Static analysis and AI-driven UI modules are fully functional.
+ **Note on API Access:** Dynamic analysis is powered by Joe Sandbox. Account approval is currently in progress. Static analysis and AI-driven UI modules are fully functional.
 
 ## Screenshots
 
