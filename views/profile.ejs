@@ -17,6 +17,9 @@
       </div>
       <div class="flex items-center gap-3">
         <a href="/" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Dashboard</a>
+        <% if (isAdmin) { %>
+          <a href="/admin/dashboard" class="rounded-lg border border-violet-500/40 bg-violet-500/10 px-4 py-2 text-sm text-violet-200 hover:bg-violet-500/20">Admin</a>
+        <% } %>
         <a href="/history" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">History</a>
         <form action="/logout" method="POST">
           <button type="submit" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Logout</button>
@@ -71,7 +74,7 @@
     <% if (isAdmin) { %>
       <section class="rounded-xl border border-slate-800 bg-slate-900/70 p-6">
         <h2 class="text-lg font-semibold">Admin Panel</h2>
-        <p class="mt-1 text-sm text-slate-400">Manage subscription tier across all registered users.</p>
+        <p class="mt-1 text-sm text-slate-400">Quick tier controls. For analytics and role management, use the <a href="/admin/dashboard" class="text-sky-300 hover:text-sky-200">admin dashboard</a>.</p>
         <div class="mt-4 overflow-hidden rounded-lg border border-slate-800">
           <table class="w-full text-left text-sm">
             <thead class="bg-slate-900 text-slate-300">
@@ -79,6 +82,7 @@
                 <th class="px-4 py-3">Username</th>
                 <th class="px-4 py-3">Email</th>
                 <th class="px-4 py-3">Tier</th>
+                <th class="px-4 py-3">Role</th>
                 <th class="px-4 py-3">Action</th>
               </tr>
             </thead>
@@ -90,8 +94,9 @@
                   <td class="px-4 py-3">
                     <span id="tier-badge-<%= u.id %>" class="uppercase <%= u.tier === 'premium' ? 'text-emerald-300' : 'text-amber-300' %>"><%= u.tier %></span>
                   </td>
+                  <td class="px-4 py-3 text-xs uppercase text-slate-400"><%= u.role || 'user' %></td>
                   <td class="px-4 py-3">
-                    <% if (u.email.toLowerCase() === 'admin@viperlens.ai') { %>
+                    <% if (u.email.toLowerCase() === superAdminEmail.toLowerCase()) { %>
                       <span class="text-xs text-slate-500">Protected</span>
                     <% } else { %>
                       <button data-user-id="<%= u.id %>" class="tier-toggle-btn rounded-md border border-sky-500/40 px-3 py-1 text-xs text-sky-200 hover:bg-sky-500/10">

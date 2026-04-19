@@ -55,10 +55,10 @@ const buildIncidentReportPdf = ({ result, aiReport }) => {
     doc.fontSize(10).fillColor('#1e293b').text(`URLs: ${(regexScan.url_matches || []).join(', ') || 'None'}`);
     doc.moveDown();
 
-    doc.fontSize(13).fillColor('#0f172a').text('Dynamic Behavioral Analysis');
+    doc.fontSize(13).fillColor('#0f172a').text('Falcon Sandbox Report');
     doc.moveDown(0.3);
     doc.fontSize(10).fillColor('#1e293b').text(`Status: ${dynamicMetadata.status || 'Not available'}`);
-    doc.fontSize(10).fillColor('#1e293b').text(`Threat Level: ${dynamicMetadata.threat_level || 'Not available'}`);
+    doc.fontSize(10).fillColor('#1e293b').text(`Threat Score: ${dynamicMetadata.threat_score || 'Not available'}`);
     doc.fontSize(10).fillColor('#1e293b').text(`MITRE Matches: ${JSON.stringify(dynamicMetadata.mitre_attck_framework_matches || [])}`);
     doc.fontSize(10).fillColor('#1e293b').text(`Signatures: ${JSON.stringify(dynamicMetadata.signatures || [])}`);
     doc.fontSize(10).fillColor('#1e293b').text(`Network Indicators: ${JSON.stringify(networkIndicators.connections || [])}`);

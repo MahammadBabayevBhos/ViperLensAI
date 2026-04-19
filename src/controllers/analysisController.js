@@ -1,12 +1,56 @@
 const path = require('path');
+const { UPLOADS_DIR } = require('../config/paths');
 const { runPythonAnalysis } = require('../services/pythonBridgeService');
 const { generateGeminiAdvice, generateComparativeGeminiAdvice } = require('../services/geminiService');
 const { buildIncidentReportPdf } = require('../services/pdfReportService');
 const { submitFile, waitForReport } = require('../services/sandboxService');
 const { normalizeSandboxReport } = require('../services/sandboxAdapter');
 const { AnalysisHistory } = require('../models');
+const { extractMalwareFamily } = require('../utils/analysisHelpers');
 
 const AUTO_DEEP_ANALYSIS = process.env.AUTO_DEEP_ANALYSIS === 'true';
+const PIPELINE_STATUS_TTL_MS = 30 * 60 * 1000;
+const pipelineStatusStore = new Map();
+
+const createStageState = () => ({
+  static: 'pending',
+  dynamic: 'pending',
+  ai: 'pending'
+});
+
+const upsertPipelineStatus = (pipelineId, patch = {}) => {
+  if (!pipelineId) {
+    return;
+  }
+  const current = pipelineStatusStore.get(pipelineId) || {
+    stages: createStageState(),
+    overall: 'pending',
+    error: null,
+    updatedAt: Date.now()
+  };
+  const merged = {
+    ...current,
+    ...patch,
+    stages: {
+      ...current.stages,
+      ...(patch.stages || {})
+    },
+    updatedAt: Date.now()
+  };
+  pipelineStatusStore.set(pipelineId, merged);
+};
+
+const getPipelineStatus = (pipelineId) => {
+  const status = pipelineStatusStore.get(pipelineId);
+  if (!status) {
+    return null;
+  }
+  if (Date.now() - status.updatedAt > PIPELINE_STATUS_TTL_MS) {
+    pipelineStatusStore.delete(pipelineId);
+    return null;
+  }
+  return status;
+};
 
 const parsePayload = (payload) => {
   if (!payload) {
@@ -37,6 +81,9 @@ const saveAnalysisRecord = async ({ userId, result, aiReport, status = 'complete
     (result.analysis && result.analysis.prediction && result.analysis.prediction.confidence) || 0
   );
 
+  const analysisBlock = (result && result.analysis) || {};
+  const malware_family = extractMalwareFamily(analysisBlock);
+
   const record = await AnalysisHistory.create({
     user_id: userId,
     file_name: result.fileName || 'unknown-file',
@@ -44,7 +91,8 @@ const saveAnalysisRecord = async ({ userId, result, aiReport, status = 'complete
     confidence,
     status,
     timestamp: new Date(),
-    report_json: JSON.stringify(buildHistoryPayload(result, aiReport))
+    report_json: JSON.stringify(buildHistoryPayload(result, aiReport)),
+    malware_family
   });
 
   return record;
@@ -72,6 +120,7 @@ const updateAnalysisRecord = async ({ recordId, userId, result, aiReport, status
   record.confidence = Number(
     (result.analysis && result.analysis.prediction && result.analysis.prediction.confidence) || record.confidence
   );
+  record.malware_family = extractMalwareFamily((result && result.analysis) || {});
   await record.save();
   return record;
 };
@@ -88,7 +137,18 @@ const renderHome = (req, res) => {
   });
 };
 
+const getPipelineStatusById = (req, res) => {
+  const pipelineId = (req.params.pipelineId || '').trim();
+  const status = getPipelineStatus(pipelineId);
+  if (!status) {
+    return res.status(404).json({ error: 'Pipeline status not found.' });
+  }
+  return res.status(200).json(status);
+};
+
 const handleUploadAndAnalyze = async (req, res) => {
+  const pipelineId = (req.body.pipelineId || '').trim();
+
   if (!req.file) {
     return res.status(400).render('index', {
       pageTitle: 'Malware Analysis Platform',
@@ -103,6 +163,16 @@ const handleUploadAndAnalyze = async (req, res) => {
   console.log(`[UPLOAD] Received file: ${req.file.filename}`);
 
   try {
+    upsertPipelineStatus(pipelineId, {
+      overall: 'running',
+      error: null,
+      stages: {
+        static: 'running',
+        dynamic: 'pending',
+        ai: 'pending'
+      }
+    });
+
     const normalizedPath = path.resolve(req.file.path);
     console.log(`[ANALYSIS] Running Python scanner for ${normalizedPath}`);
 
@@ -132,17 +202,65 @@ const handleUploadAndAnalyze = async (req, res) => {
       result: resultPayload,
       aiReport
     });
+    upsertPipelineStatus(pipelineId, {
+      overall: 'completed',
+      stages: {
+        static: 'completed'
+      }
+    });
+
+    const renderedResult = { ...resultPayload, historyId: historyRecord.id };
+
+    if (req.xhr || req.headers.accept === 'application/json') {
+      return res.render(
+        'index',
+        {
+          pageTitle: 'Malware Analysis Platform',
+          result: renderedResult,
+          error: null,
+          aiReport,
+          isFreeTier: userTier !== 'premium',
+          user: req.session.user
+        },
+        (renderError, html) => {
+          if (renderError) {
+            return res.status(500).json({
+              ok: false,
+              error: `View rendering failed: ${renderError.message}`
+            });
+          }
+          return res.status(200).json({
+            ok: true,
+            html
+          });
+        }
+      );
+    }
 
     return res.status(200).render('index', {
       pageTitle: 'Malware Analysis Platform',
-      result: { ...resultPayload, historyId: historyRecord.id },
+      result: renderedResult,
       error: null,
       aiReport,
       isFreeTier: userTier !== 'premium',
       user: req.session.user
     });
   } catch (error) {
+    upsertPipelineStatus(pipelineId, {
+      overall: 'failed',
+      error: error.message,
+      stages: {
+        static: 'failed'
+      }
+    });
     console.error(`[ANALYSIS] Failed for ${req.file.filename}: ${error.message}`);
+
+    if (req.xhr || req.headers.accept === 'application/json') {
+      return res.status(500).json({
+        ok: false,
+        error: `Analysis failed: ${error.message}`
+      });
+    }
 
     return res.status(500).render('index', {
       pageTitle: 'Malware Analysis Platform',
@@ -156,21 +274,39 @@ const handleUploadAndAnalyze = async (req, res) => {
 };
 
 const handleDeepAiAnalysis = async (req, res) => {
+  const pipelineId = (req.body.pipelineId || '').trim();
+
   try {
+    upsertPipelineStatus(pipelineId, {
+      overall: 'running',
+      error: null,
+      stages: {
+        static: 'completed',
+        dynamic: 'running',
+        ai: 'pending'
+      }
+    });
+
     const result = parsePayload(req.body.resultPayload);
     const staticAnalysis = result.analysis || {};
     const historyId = result.historyId || null;
 
     console.log(`[PREMIUM] Deep AI pipeline started for ${result.storedAs || 'unknown-file'}`);
-    console.log('[SANDBOX] Submitting file to Joe Sandbox');
-    const filePath = path.resolve(__dirname, '../../uploads', result.storedAs);
+    console.log('[FALCON] Submitting file to Falcon Sandbox (Hybrid Analysis)');
+    const filePath = path.resolve(UPLOADS_DIR, result.storedAs);
     const submissionId = await submitFile(filePath);
-    console.log(`[SANDBOX] Submission created: ${submissionId}`);
+    console.log(`[FALCON] Submission created: ${submissionId}`);
 
-    console.log('[SANDBOX] Polling Joe Sandbox for completion');
+    console.log('[FALCON] Polling Falcon Sandbox /check-state endpoint for completion');
     const sandboxReport = await waitForReport(submissionId);
     const normalizedSandboxReport = normalizeSandboxReport(sandboxReport);
-    console.log(`[SANDBOX] Report received for submission ${submissionId}`);
+    console.log(`[FALCON] Summary report received for submission ${submissionId}`);
+    upsertPipelineStatus(pipelineId, {
+      stages: {
+        dynamic: 'completed',
+        ai: 'running'
+      }
+    });
 
     const combinedIntelligence = {
       static_analysis: staticAnalysis,
@@ -190,9 +326,39 @@ const handleDeepAiAnalysis = async (req, res) => {
       result: updatedResult,
       aiReport
     });
+    upsertPipelineStatus(pipelineId, {
+      overall: 'completed',
+      stages: {
+        ai: 'completed'
+      }
+    });
 
     console.log('[PREMIUM] Deep AI pipeline completed');
-
+    if (req.xhr || req.headers.accept === 'application/json') {
+      return res.render(
+        'index',
+        {
+          pageTitle: 'Malware Analysis Platform',
+          result: updatedResult,
+          aiReport,
+          error: null,
+          isFreeTier: req.session.user.tier !== 'premium',
+          user: req.session.user
+        },
+        (renderError, html) => {
+          if (renderError) {
+            return res.status(500).json({
+              ok: false,
+              error: `View rendering failed: ${renderError.message}`
+            });
+          }
+          return res.status(200).json({
+            ok: true,
+            html
+          });
+        }
+      );
+    }
     return res.status(200).render('index', {
       pageTitle: 'Malware Analysis Platform',
       result: updatedResult,
@@ -202,7 +368,21 @@ const handleDeepAiAnalysis = async (req, res) => {
       user: req.session.user
     });
   } catch (error) {
+    upsertPipelineStatus(pipelineId, {
+      overall: 'failed',
+      error: error.message,
+      stages: {
+        dynamic: 'failed',
+        ai: 'failed'
+      }
+    });
     console.error(`[PREMIUM] Deep AI Analysis failed: ${error.message}`);
+    if (req.xhr || req.headers.accept === 'application/json') {
+      return res.status(500).json({
+        ok: false,
+        error: `Deep AI Analysis failed: ${error.message}`
+      });
+    }
     return res.status(500).render('index', {
       pageTitle: 'Malware Analysis Platform',
       result: null,
@@ -241,6 +421,7 @@ const handlePdfDownload = async (req, res) => {
 
 module.exports = {
   renderHome,
+  getPipelineStatusById,
   handleUploadAndAnalyze,
   handleDeepAiAnalysis,
   handlePdfDownload

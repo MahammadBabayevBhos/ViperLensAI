@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= pageTitle %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/public/css/styles.css" />
+</head>
+<body class="h-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 antialiased">
+  <div id="adminToast" class="pointer-events-none fixed right-6 top-6 z-50 hidden rounded-lg border px-4 py-2 text-sm"></div>
+
+  <main class="mx-auto max-w-6xl px-6 py-10 space-y-8">
+    <header class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-6">
+      <div>
+        <p class="text-xs uppercase tracking-[0.3em] text-sky-400">Administration</p>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight">Operations dashboard</h1>
+        <p class="mt-1 text-sm text-slate-400">Analytics, threat telemetry, and account controls.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <a href="/" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Analysis</a>
+        <a href="/profile" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Profile</a>
+        <form action="/logout" method="POST">
+          <button type="submit" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Logout</button>
+        </form>
+      </div>
+    </header>
+
+    <section class="grid gap-4 sm:grid-cols-3">
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Total users</p>
+        <p class="mt-2 text-3xl font-semibold text-slate-100"><%= stats.totalUsers.toLocaleString() %></p>
+      </div>
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Premium subscriptions</p>
+        <p class="mt-2 text-3xl font-semibold text-emerald-300"><%= stats.premiumSubscriptions.toLocaleString() %></p>
+      </div>
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl">
+        <p class="text-xs uppercase tracking-wide text-slate-500">Total files scanned</p>
+        <p class="mt-2 text-3xl font-semibold text-sky-300"><%= stats.totalFilesScanned.toLocaleString() %></p>
+      </div>
+    </section>
+
+    <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+      <h2 class="text-lg font-semibold text-slate-100">Malware statistics</h2>
+      <p class="mt-1 text-sm text-slate-400">Distribution of stored <code class="rounded bg-slate-950 px-1 py-0.5 text-xs text-sky-300">malware_family</code> labels across analysis history.</p>
+      <div class="mt-4 overflow-hidden rounded-xl border border-slate-800">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-950 text-slate-400">
+            <tr>
+              <th class="px-4 py-3 font-medium">Family / category</th>
+              <th class="px-4 py-3 font-medium">Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!stats.malwareFamilies.length) { %>
+              <tr class="border-t border-slate-800">
+                <td class="px-4 py-4 text-slate-500" colspan="2">No scan history yet.</td>
+              </tr>
+            <% } else { %>
+              <% stats.malwareFamilies.forEach((row) => { %>
+                <tr class="border-t border-slate-800">
+                  <td class="px-4 py-3 text-slate-200"><%= row.family %></td>
+                  <td class="px-4 py-3 text-slate-300"><%= row.count.toLocaleString() %></td>
+                </tr>
+              <% }) %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+      <h2 class="text-lg font-semibold text-slate-100">User management</h2>
+      <p class="mt-1 text-sm text-slate-400">Signed in as <span class="text-slate-300"><%= superAdminEmail %></span> only. Adjust tiers and roles; delete removes the account and all stored scan history (cannot delete yourself or this admin).</p>
+      <div class="mt-4 overflow-hidden rounded-xl border border-slate-800">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-950 text-slate-400">
+            <tr>
+              <th class="px-4 py-3 font-medium">Username</th>
+              <th class="px-4 py-3 font-medium">Email</th>
+              <th class="px-4 py-3 font-medium">Tier</th>
+              <th class="px-4 py-3 font-medium">Role</th>
+              <th class="px-4 py-3 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% users.forEach((u) => { %>
+              <tr class="border-t border-slate-800" data-user-id="<%= u.id %>">
+                <td class="px-4 py-3 text-slate-200"><%= u.username %></td>
+                <td class="px-4 py-3 text-slate-400"><%= u.email %></td>
+                <td class="px-4 py-3">
+                  <span class="tier-badge uppercase <%= u.tier === 'premium' ? 'text-emerald-300' : 'text-amber-300' %>"><%= u.tier %></span>
+                </td>
+                <td class="px-4 py-3">
+                  <% if (u.email.toLowerCase() === superAdminEmail.toLowerCase()) { %>
+                    <span class="text-xs font-semibold uppercase text-sky-300">admin</span>
+                  <% } else { %>
+                    <select class="role-select rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200" data-user-id="<%= u.id %>">
+                      <option value="user" <%= u.role === 'user' ? 'selected' : '' %>>user</option>
+                      <option value="admin" <%= u.role === 'admin' ? 'selected' : '' %>>admin</option>
+                    </select>
+                  <% } %>
+                </td>
+                <td class="px-4 py-3">
+                  <% if (u.email.toLowerCase() === superAdminEmail.toLowerCase()) { %>
+                    <span class="text-xs text-slate-500">Protected</span>
+                  <% } else { %>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <button type="button" class="tier-toggle-btn rounded-md border border-sky-500/40 px-3 py-1 text-xs text-sky-200 hover:bg-sky-500/10" data-user-id="<%= u.id %>">
+                        Toggle tier
+                      </button>
+                      <button type="button" class="user-delete-btn rounded-md border border-red-500/40 px-3 py-1 text-xs text-red-200 hover:bg-red-500/10" data-user-id="<%= u.id %>">
+                        Delete user
+                      </button>
+                    </div>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const toast = document.getElementById('adminToast');
+
+      const showToast = (message, ok) => {
+        if (!toast) return;
+        toast.textContent = message;
+        toast.className = ok
+          ? 'pointer-events-none fixed right-6 top-6 z-50 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200'
+          : 'pointer-events-none fixed right-6 top-6 z-50 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-200';
+        toast.classList.remove('hidden');
+        setTimeout(() => toast.classList.add('hidden'), 2200);
+      };
+
+      document.querySelectorAll('.tier-toggle-btn').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const userId = button.getAttribute('data-user-id');
+          button.disabled = true;
+          try {
+            const response = await fetch(`/admin/users/${userId}/toggle-tier`, { method: 'POST' });
+            const payload = await response.json();
+            if (!response.ok || payload.status !== 'ok') {
+              throw new Error('Tier update failed');
+            }
+            const row = button.closest('tr');
+            const badge = row && row.querySelector('.tier-badge');
+            if (badge) {
+              badge.textContent = payload.user.tier;
+              badge.className = `tier-badge uppercase ${payload.user.tier === 'premium' ? 'text-emerald-300' : 'text-amber-300'}`;
+            }
+            showToast('Tier updated.', true);
+          } catch (_e) {
+            showToast('Tier update failed.', false);
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+
+      document.querySelectorAll('.role-select').forEach((select) => {
+        select.addEventListener('change', async () => {
+          const userId = select.getAttribute('data-user-id');
+          const role = select.value;
+          select.disabled = true;
+          try {
+            const response = await fetch(`/admin/users/${userId}/role`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role })
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.status !== 'ok') {
+              throw new Error('Role update failed');
+            }
+            showToast('Role updated.', true);
+          } catch (_e) {
+            showToast('Role update failed.', false);
+          } finally {
+            select.disabled = false;
+          }
+        });
+      });
+
+      document.querySelectorAll('.user-delete-btn').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const userId = button.getAttribute('data-user-id');
+          if (!window.confirm(`Permanently delete user #${userId}? All scan history for this account will be removed. This cannot be undone.`)) {
+            return;
+          }
+          button.disabled = true;
+          try {
+            const response = await fetch(`/admin/users/${userId}/delete`, { method: 'POST' });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.status !== 'ok') {
+              throw new Error('delete failed');
+            }
+            const row = button.closest('tr');
+            if (row) row.remove();
+            showToast('User deleted.', true);
+          } catch (_e) {
+            showToast('Delete failed.', false);
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

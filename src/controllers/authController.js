@@ -1,14 +1,18 @@
 const bcrypt = require('bcrypt');
+const { fn, col, where } = require('sequelize');
 const { User } = require('../models');
-
-const ADMIN_EMAIL = 'admin@viperlens.ai';
+const { SUPER_ADMIN_EMAIL } = require('../config/constants');
+const { toSessionUser } = require('../utils/sessionUser');
 
 const toProfileViewModel = async (req, overrides = {}) => {
   const currentUser = await User.findByPk(req.session.user.id);
-  const isAdmin = currentUser.email.toLowerCase() === ADMIN_EMAIL;
+  const isAdmin =
+    currentUser &&
+    currentUser.email &&
+    currentUser.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
   const users = isAdmin
     ? await User.findAll({
-        attributes: ['id', 'username', 'email', 'tier'],
+        attributes: ['id', 'username', 'email', 'tier', 'role'],
         order: [['id', 'ASC']]
       })
     : [];
@@ -18,6 +22,7 @@ const toProfileViewModel = async (req, overrides = {}) => {
     user: req.session.user,
     profileUser: currentUser,
     isAdmin,
+    superAdminEmail: SUPER_ADMIN_EMAIL,
     users,
     error: null,
     success: null,
@@ -55,10 +60,9 @@ const register = async (req, res) => {
       });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
     const existing = await User.findOne({
-      where: {
-        email
-      }
+      where: where(fn('lower', col('email')), normalizedEmail)
     });
     if (existing) {
       return res.status(409).render('register', {
@@ -68,14 +72,15 @@ const register = async (req, res) => {
     }
 
     const password_hash = await bcrypt.hash(password, 12);
-    const user = await User.create({ username, email, password_hash, tier: 'free' });
+    const user = await User.create({
+      username,
+      email: normalizedEmail,
+      password_hash,
+      tier: 'free',
+      role: 'user'
+    });
 
-    req.session.user = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      tier: user.tier
-    };
+    req.session.user = toSessionUser(user);
 
     return res.redirect('/');
   } catch (error) {
@@ -97,7 +102,10 @@ const login = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({
+      where: where(fn('lower', col('email')), normalizedEmail)
+    });
     if (!user) {
       return res.status(401).render('login', {
         pageTitle: 'Login - ViperLens',
@@ -113,12 +121,13 @@ const login = async (req, res) => {
       });
     }
 
-    req.session.user = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      tier: user.tier
-    };
+    if (normalizedEmail === SUPER_ADMIN_EMAIL.toLowerCase()) {
+      user.role = 'admin';
+      user.tier = 'premium';
+      await user.save();
+    }
+
+    req.session.user = toSessionUser(user);
 
     return res.redirect('/');
   } catch (error) {
@@ -158,23 +167,19 @@ const updateProfile = async (req, res) => {
       return res.status(404).render('profile', await toProfileViewModel(req, { error: 'User account not found.' }));
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
     const conflictUser = await User.findOne({
-      where: { email }
+      where: where(fn('lower', col('email')), normalizedEmail)
     });
     if (conflictUser && conflictUser.id !== profileUser.id) {
       return res.status(409).render('profile', await toProfileViewModel(req, { error: 'Email is already in use.' }));
     }
 
     profileUser.username = username;
-    profileUser.email = email;
+    profileUser.email = normalizedEmail;
     await profileUser.save();
 
-    req.session.user = {
-      id: profileUser.id,
-      username: profileUser.username,
-      email: profileUser.email,
-      tier: profileUser.tier
-    };
+    req.session.user = toSessionUser(profileUser);
 
     return res.redirect('/profile?success=Profile updated successfully!');
   } catch (error) {

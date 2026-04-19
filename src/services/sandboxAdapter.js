@@ -127,6 +127,40 @@ const groupRegistryReadOps = (records) => {
     .slice(0, MAX_UNIQUE_PREVIEW);
 };
 
+const normalizeMitreEntry = (entry = {}) => {
+  if (typeof entry === 'string') {
+    return {
+      tactic_name: 'Unknown',
+      technique_id: entry,
+      malicious_intent: 'Behavior aligned with suspicious execution activity.'
+    };
+  }
+  const tacticName =
+    entry.tactic ||
+    entry.tactic_name ||
+    entry.tacticLabel ||
+    entry.tactic_id ||
+    'Unknown';
+  const techniqueId =
+    entry.technique_id ||
+    entry.techniqueId ||
+    entry.attack_id ||
+    entry.id ||
+    'Unknown';
+  const maliciousIntent =
+    entry.malicious_intent ||
+    entry.intent ||
+    entry.description ||
+    entry.signature ||
+    'Behavior aligned with suspicious execution activity.';
+
+  return {
+    tactic_name: String(tacticName),
+    technique_id: String(techniqueId),
+    malicious_intent: String(maliciousIntent)
+  };
+};
+
 const enforceSizeBudget = (normalized) => {
   let output = normalized;
   let bytes = Buffer.byteLength(JSON.stringify(output), 'utf8');
@@ -202,17 +236,28 @@ const normalizeSandboxReport = (rawReport = {}) => {
     ...(Array.isArray(rawReport.file_drops) ? rawReport.file_drops : []),
     ...(Array.isArray(rawReport.dropped_files) ? rawReport.dropped_files : [])
   ];
-  const signatures = Array.isArray(rawReport.signatures) ? rawReport.signatures : [];
-  const mitre = rawReport.mitre_attck_framework_matches || rawReport.mitre_attck || rawReport.mitre || [];
+  const signatures = Array.isArray(rawReport.signatures)
+    ? rawReport.signatures
+    : Array.isArray(rawReport.scanners)
+      ? rawReport.scanners
+      : [];
+  const mitreRaw =
+    rawReport['mitre_att&ck'] ||
+    rawReport.mitre_attck ||
+    rawReport.mitre_attck_framework_matches ||
+    rawReport.mitre ||
+    [];
+  const mitre = Array.isArray(mitreRaw) ? mitreRaw : [mitreRaw].filter(Boolean);
 
   const normalized = {
     metadata: {
       status: rawReport.status || rawReport.analysis_status || 'unknown',
-      submission_id: rawReport.submission_id || rawReport.id || rawReport.webid || null,
-      threat_level: rawReport.threat_level || rawReport.score || 'unknown',
-      mitre_attck_framework_matches: Array.isArray(mitre) ? mitre : [mitre].filter(Boolean),
+      submission_id: rawReport.job_id || rawReport.submission_id || rawReport.id || rawReport.webid || null,
+      threat_score: rawReport.threat_score || rawReport.score || rawReport.threat_level || 'unknown',
+      mitre_attck_framework_matches: mitre,
       signatures: uniqueByText(signatures, MAX_CATEGORY_ITEMS)
     },
+    mitre_attck: uniqueByText(mitre.map((entry) => normalizeMitreEntry(entry)), MAX_CATEGORY_ITEMS),
     evasion_attempts: {
       total_events: injectionCalls.length + persistenceCalls.length,
       preserved_injection_calls: injectionCalls,

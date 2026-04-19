@@ -31,6 +31,11 @@ const AnalysisHistory = sequelize.define(
     report_json: {
       type: DataTypes.TEXT,
       allowNull: false
+    },
+    malware_family: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'unknown'
     }
   },
   {

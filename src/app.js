@@ -5,6 +5,9 @@ const analysisRoutes = require('./routes/analysisRoutes');
 const authRoutes = require('./routes/authRoutes');
 const historyRoutes = require('./routes/historyRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const checkoutRoutes = require('./routes/checkoutRoutes');
+const { SUPER_ADMIN_EMAIL } = require('./config/constants');
+const { sessionIsSuperAdmin } = require('./middleware/authMiddleware');
 
 const app = express();
 
@@ -29,10 +32,13 @@ app.use('/public', express.static(path.join(__dirname, '../public')));
 
 app.use((req, res, next) => {
   res.locals.user = req.session.user || null;
+  res.locals.superAdminEmail = SUPER_ADMIN_EMAIL;
+  res.locals.isSuperAdmin = sessionIsSuperAdmin(req.session && req.session.user);
   next();
 });
 
 app.use('/', authRoutes);
+app.use('/', checkoutRoutes);
 app.use('/', analysisRoutes);
 app.use('/', historyRoutes);
 app.use('/', adminRoutes);
