@@ -88,21 +88,6 @@ Server default: `http://localhost:3000`
 
 Dynamic analysis is powered by Hybrid Analysis (Falcon Sandbox). Static analysis and AI-driven UI modules are fully functional.
 
-## Screenshots
-
-> Replace these placeholders with actual images from your deployment.
-
-### Dashboard
-
-![Dashboard Placeholder](./docs/screenshots/dashboard-placeholder.png)
-
-### Analysis Result
-
-![Analysis Result Placeholder](./docs/screenshots/analysis-result-placeholder.png)
-
-### PDF Report
-
-![PDF Report Placeholder](./docs/screenshots/pdf-report-placeholder.png)
 
 ## Security Notes
 
