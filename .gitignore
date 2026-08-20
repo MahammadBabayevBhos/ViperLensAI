@@ -1,4 +1,11 @@
-node_modules
+node_modules/
 .env
 uploads/*
 !uploads/.gitkeep
+data/*.sqlite
+*.sqlite
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+.DS_Store
