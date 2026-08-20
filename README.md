@@ -4,7 +4,7 @@ ViperLensAI statik bayt-kod evristikasi, dinamik sandbox davranis analizi ve Goo
 
 ## Esas Imkanlar
 
-* Statik Analiz Muherriki: Shannon entropiya profili, IAT (Import Address Table) risk tesnifati, PE bolme (section) analizi, regex IOC skanlamasi ve normallasdirilmis tehluke bali.
+* Statik ve 1D-CNN Analiz Muherriki: PE bayt-kod tenzorunun hazirlanmasi (1D-CNN input), Shannon entropiya profili, IAT (Import Address Table) risk tesnifati, PE bolme (section) analizi, regex IOC skanlamasi ve normallasdirilmis vektor tesnifati.
 * Dinamik Davranis Analizi: Hybrid Analysis (Falcon Sandbox) inteqrasiyasi ile faylin icra zamani proses, sebeke ve fayl sistemi tesirlerinin izlenmesi.
 * Suni Intellekt Muhakimesi: Gemini 1.5 Flash vasitesile statik ve dinamik gostericilerin sintezi, tehlukeniz esaslandirilmasi ve tovsiyeler.
 * SOC Istifadeci Paneli: Express ve EJS esasli qaranliq interfeys, sessiya autentifikasiyasi, skan tarixcesi ve profil idareetmesi.

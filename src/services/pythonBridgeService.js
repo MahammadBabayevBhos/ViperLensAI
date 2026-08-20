@@ -1,13 +1,19 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-const PYTHON_EXECUTABLE = process.env.PYTHON_EXECUTABLE || 'python';
+const getPythonCommand = () => {
+  if (process.env.PYTHON_EXECUTABLE) {
+    return process.env.PYTHON_EXECUTABLE;
+  }
+  return process.platform === 'win32' ? 'python' : 'python3';
+};
+
 const ANALYZER_SCRIPT_PATH = path.resolve(__dirname, '../../scripts/analyze_malware.py');
 
-const runPythonAnalysis = (filePath) => {
+const executeProcess = (executable, filePath) => {
   return new Promise((resolve, reject) => {
     const args = [ANALYZER_SCRIPT_PATH, filePath];
-    const pythonProcess = spawn(PYTHON_EXECUTABLE, args);
+    const pythonProcess = spawn(executable, args);
 
     let stdOut = '';
     let stdErr = '';
@@ -21,7 +27,7 @@ const runPythonAnalysis = (filePath) => {
     });
 
     pythonProcess.on('error', (error) => {
-      reject(new Error(`Failed to start Python process: ${error.message}`));
+      reject(error);
     });
 
     pythonProcess.on('close', (code) => {
@@ -47,6 +53,25 @@ const runPythonAnalysis = (filePath) => {
   });
 };
 
+const runPythonAnalysis = async (filePath) => {
+  const primaryCmd = getPythonCommand();
+  try {
+    return await executeProcess(primaryCmd, filePath);
+  } catch (err) {
+    // If primary executable failed to spawn (ENOENT), try alternative binary
+    if (err.code === 'ENOENT') {
+      const fallbackCmd = primaryCmd === 'python' ? 'python3' : 'python';
+      try {
+        return await executeProcess(fallbackCmd, filePath);
+      } catch (fallbackErr) {
+        throw new Error(`Failed to start Python analyzer using '${primaryCmd}' and '${fallbackCmd}': ${fallbackErr.message}`);
+      }
+    }
+    throw err;
+  }
+};
+
 module.exports = {
   runPythonAnalysis
 };
+
